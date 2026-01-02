@@ -1,0 +1,129 @@
+---
+title: "Fig2"
+author: "N Toyohara"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r step1, echo=FALSE, message=FALSE}
+library(openxlsx)
+library(plotly)
+library(dplyr)
+library(htmlwidgets)
+
+## ---- データ読み込み ----
+filnam <- "kansai_cli_ci_c.xlsx"
+data   <- read.xlsx(filnam, sheet = 1)
+
+## ---- 日付の作成（2018年1月～　月次）
+date1 <- seq.Date(from = as.Date("2018-01-01"),
+                  by   = "month",
+                  length.out = nrow(data))
+
+## ---- データフレームの作成
+df1 <- cbind.data.frame(date = date1, data)
+```
+```{r step2, echo=FALSE}
+## ---- kansai_cliの作成
+kansai_cli<-0.473*data$osaka_cli+0.235*data$hyogo_cli+0.127*data$kyoto_cli+0.074*data$shiga_cli+0.045*data$nara_cli+0.046*data$waka_cli
+
+## ---- データフレームに追加
+df <- cbind.data.frame(df1,x=kansai_cli)
+```
+
+```{r step3, echo=FALSE}
+## ---- Morlet型ウェーブレット母関数を定義 ----
+morlet <- function(t, a = 4){
+  tt <- t / a
+  pi^(-1/4) * exp(1i * 6 * tt) * exp(-tt^2 / 2)
+}
+
+## ---- x を標準化 ------------------------------------------------------
+x_std <- as.numeric(scale(df$x, center = TRUE, scale = TRUE))
+
+  a_vec   <- c(6, 12, 24)
+  b_vec   <- seq(20, 60, by = 1)   # b = 20,25,...,60
+  nT      <- nrow(df)
+  t_index <- seq_len(nT)
+  
+for (a_fixed in a_vec) {
+## ---- z(t,b) = x(t)*Re(ψ) を計算 ----------------------------------
+  Zmat_raw <- matrix(NA_real_, nrow = nT, ncol = length(b_vec))
+
+  for (j in seq_along(b_vec)) {
+    b   <- b_vec[j]
+    tau <- t_index - b
+    psi <- morlet(tau, a = a_fixed)
+#    z   <- x_std * (Re(psi)^2+Im(psi)^2)
+    z   <- x_std * Re(psi)
+    Zmat_raw[, j] <- z
+  }
+
+  ## ---- 全体で標準化 -----------------------------------------------
+  Zvec_std <- as.numeric(scale(as.vector(Zmat_raw),
+                               center = TRUE, scale = TRUE))
+  Zmat_std <- matrix(Zvec_std, nrow = nT, ncol = length(b_vec))
+
+  ## ---- 3D plot ----------------------------------------------------
+  p <- plot_ly()
+
+  for (j in seq_along(b_vec)) {
+    p <- p %>%
+      add_trace(
+        x    = df$date,
+        y    = rep(b_vec[j], nT),
+        z    = Zmat_std[, j],
+        type = "scatter3d",
+        mode = "lines",
+        showlegend = FALSE
+      )
+  }
+
+  ## ---- Kansai CLI（基準線） ----------------------------------------
+  cli_y_pos <- min(b_vec) - 5
+
+  p <- p %>%
+    add_trace(
+      x    = df$date,
+      y    = rep(cli_y_pos, nT),
+      z    = x_std,
+      type = "scatter3d",
+      mode = "lines",
+      line = list(color = "red", width = 6),
+      showlegend = FALSE
+    )
+
+  ## ---- layout -----------------------------------------------------
+  p <- p %>%
+    layout(
+      scene = list(
+        xaxis = list(title = "Date"),
+        yaxis = list(title = "b"),
+        zaxis = list(title = "standardized x(t)Re(ψ)"),
+        camera = list(eye = list(x = 0, y = -2.5, z = 0.2))
+      ),
+      title = paste0(
+        "Kansai CLI – 3D Morlet projection (a = ", a_fixed, ")"
+      )
+    )
+
+  ## ---- 保存 --------------------------------------------------------
+  a_f0<-paste("0",a_fixed,sep="")
+  a_fixed2<-substr(a_f0,nchar(a_f0)-1,nchar(a_f0))
+    saveWidget(
+    p,
+    file = paste0("kansai_cli_morlet_3d_a=", a_fixed2, ".html"),
+    selfcontained = TRUE
+  )
+}
+  
+```
+
+[a= 6の3次元図を開く](kansai_cli_morlet_3d_a=06.html)<br>
+[a=12の3次元図を開く](kansai_cli_morlet_3d_a=12.html)<br>
+[a=24の3次元図を開く](kansai_cli_morlet_3d_a=24.html)<br>
+
+

@@ -1,0 +1,197 @@
+---
+title: "Fig 6"
+author: "N Toyohara"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r data, echo=FALSE}
+library(openxlsx)
+library(WaveletComp)
+
+## ---- データ読み込み ----
+filnam <- "kansai_cli_ci_c.xlsx"
+data  <- read.xlsx(filnam, sheet = 1)
+
+# 2018-01 から nrow(data) ヶ月分の Date ベクトル
+date1 <- seq.Date(from = as.Date("2018-01-01"),
+                  by   = "month",
+                  length.out = nrow(data))
+
+x <- 0.473*data$osaka_cli +
+              0.235*data$hyogo_cli +
+              0.127*data$kyoto_cli +
+              0.074*data$shiga_cli +
+              0.045*data$nara_cli  +
+              0.046*data$waka_cli
+y <- 0.473*data$osaka_ci_c +
+              0.235*data$hyogo_ci_c +
+              0.127*data$kyoto_ci_c +
+              0.074*data$shiga_ci_c +
+              0.045*data$nara_ci_c  +
+              0.046*data$waka_ci_c
+
+df1 <- data.frame(date = date1, data, kansai_cli = x, kansai_ci_c = y)
+
+# 
+
+## ---- cohesion（多系列）を WaveletComp で計算 ----
+
+# 県別系列名（CLI 側）
+vars_cli <- c("osaka_cli","hyogo_cli","kyoto_cli","shiga_cli","nara_cli","waka_cli")
+
+# 県別系列名（CI_C 側）
+vars_cic <- c("osaka_ci_c","hyogo_ci_c","kyoto_ci_c","shiga_ci_c","nara_ci_c","waka_ci_c")
+
+# 重み（あなたが kansai_cli / kansai_ci_c で使っているもの）
+w <- c(0.473, 0.235, 0.127, 0.074, 0.045, 0.046)
+
+
+# Rua型 rho_ij(tau,s) を作って、ペア重み付き平均＝cohesion を返す関数
+calc_cohesion_waveletcomp <- function(df, vars, w, dt = 1, dj = 1/12, loess.span = 0.75, make.pval = FALSE) {
+
+  # ペア重み ω_ij を w_i*w_j で作り、Σω_ij=1 に正規化
+  Wpair <- outer(w, w)
+  diag(Wpair) <- 0
+  ij <- which(upper.tri(Wpair), arr.ind = TRUE)
+  omega <- Wpair[ij]
+  omega <- omega / sum(omega)
+
+  Coh <- NULL
+  scale_out <- NULL
+  coi_out <- NULL
+
+  for (k in 1:nrow(ij)) {
+    i <- ij[k, 1]
+    j <- ij[k, 2]
+
+    tmp <- df[, c(vars[i], vars[j])]
+    names(tmp) <- c("x", "y")
+
+sink("nul")
+        coh <- analyze.coherency(tmp,
+                             my.pair = c("x","y"),
+                             dt = dt, dj = dj,
+                             loess.span = loess.span,
+                             make.pval = make.pval)
+sink()
+
+    # Rua(2010) 型：rho_ij(tau,s)=Re(Wxy)/sqrt(Px*Py)
+    rho_ij <- Re(coh$Wave.xy) / sqrt(coh$Power.x * coh$Power.y)
+
+    if (is.null(Coh)) {
+      Coh <- omega[k] * rho_ij
+      scale_out <- coh$Period
+      coi_out <- coh$coi
+    } else {
+      Coh <- Coh + omega[k] * rho_ij
+    }
+  }
+
+  list(cohesion = Coh, scale = scale_out, coi = coi_out, vars = vars, w = w)
+}
+
+
+# (A) CLI（6府県）の cohesion
+res_cli <- calc_cohesion_waveletcomp(df1, vars_cli, w, dt = 1, dj = 1/12, loess.span = 0.75)
+
+# (B) CI_C（6府県）の cohesion
+res_cic <- calc_cohesion_waveletcomp(df1, vars_cic, w, dt = 1, dj = 1/12, loess.span = 0.75)
+
+
+## ---- 簡易プロット（time × scale のヒートマップ）----
+# WaveletComp の行列は [scale x time] なので、image 用に t() しておく
+# 縦軸を「周期（月）」で見たいなら period ≈ scale*dt（Morletでほぼ比例、厳密換算は別途）
+
+```
+```{r step03, echo=F}
+# 例：描画に使っているオブジェクト
+# データ
+
+z <- t(res_cli$cohesion)
+x <- date1
+y <- res_cli$scale    # ← ご指定どおり
+
+# カラーパレット（低=青，高=赤）
+ncol <- 200
+col  <- colorRampPalette(c("blue", "white", "#d00000"))(ncol
+)
+# 値域（比較用に固定）
+zlim <- c(-1, 1)
+
+## ---- レイアウト（右に凡例）----
+layout(matrix(c(1,2), nrow = 1), widths = c(4,1))
+
+## ---- 本体 ----
+par(mar = c(5,4,4,1))
+image(x = x, y = y, z = z,
+      col = col, zlim = zlim,
+      xlab = "Time", ylab = "Scale",
+      main = "Cohesion (CLI, 6 prefectures)")
+## ---- 等高線を追加 ----
+contour(x = x, y = y, z = z,
+        levels = seq(-1, 1, by = 0.5),
+        add = TRUE,
+        drawlabels = FALSE,
+        col = "black",
+        lwd = 1)
+
+## ---- 右側凡例（カラーバー）----
+par(mar = c(5,2,4,4))
+z_seq <- seq(zlim[1], zlim[2], length.out = ncol)
+
+image(x = 1, y = z_seq,
+      z = matrix(z_seq, nrow = 1),
+      col = col,
+      xaxt = "n", xlab = "", ylab = "Cohesion")
+axis(4, at = seq(-1, 1, by = 0.5), las = 1)
+box()
+
+
+```
+
+```{r step04, echo=F}
+# 例：描画に使っているオブジェクト
+# データ
+
+z <- t(res_cic$cohesion)
+x <- date1
+y <- res_cic$scale    # ← ご指定どおり
+
+# 値域（比較用に固定）
+zlim <- c(-1, 1)
+
+## ---- レイアウト（右に凡例）----
+layout(matrix(c(1,2), nrow = 1), widths = c(4,1))
+
+## ---- 本体 ----
+par(mar = c(5,4,4,1))
+image(x = x, y = y, z = z,
+      col = col, zlim = zlim,
+      xlab = "Time", ylab = "Scale",
+      main = "Cohesion (CI_c, 6 prefectures)")
+## ---- 等高線を追加 ----
+contour(x = x, y = y, z = z,
+        levels = seq(-1, 1, by = 0.5),
+        add = TRUE,
+        drawlabels = FALSE,
+        col = "black",
+        lwd = 1)
+
+## ---- 右側凡例（カラーバー）----
+par(mar = c(5,2,4,4))
+z_seq <- seq(zlim[1], zlim[2], length.out = ncol)
+
+image(x = 1, y = z_seq,
+      z = matrix(z_seq, nrow = 1),
+      col = col,
+      xaxt = "n", xlab = "", ylab = "Cohesion")
+
+axis(4, at = seq(-1, 1, by = 0.5), las = 1)
+box()
+
+
+```

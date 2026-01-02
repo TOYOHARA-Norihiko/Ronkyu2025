@@ -1,0 +1,107 @@
+---
+title: "Fig 4"
+author: "N Toyohara"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r data, echo=FALSE}
+library(openxlsx)
+library(WaveletComp)
+
+filnam <- "kansai_cli_ci_c.xlsx"
+data  <- read.xlsx(filnam, sheet = 1)
+
+# 2018-01 から nrow(data) ヶ月分の Date ベクトルを作成
+
+date1 <- seq.Date(from = as.Date("2018-01-01"),
+by   = "month",
+length.out = nrow(data))
+
+# WaveletComp が参照しやすいように列名は date にしておく
+
+df1 <- cbind.data.frame(date = date1, data)
+
+```
+
+```{r step01, echo=FALSE}
+# 月次データ前提（2018-01スタート）
+
+dt <- 1            # 単位は「月」
+dj <- 1/12         # 周波数分解能
+lowerPeriod <- 2   # 最短周期（2ヶ月）
+upperPeriod <- 64  # 最長周期（64ヶ月）
+
+# 解析対象列（date 以外）
+
+vars <- setdiff(names(df1), "date")
+
+# x軸の tick 位置とラベル（2018-01, 2018-02, ... を "%Y-%m" 表示）
+
+time_ticks  <- 1:nrow(df1)                      # 1, 2, 3, ...
+time_labels <- format(df1$date, "%Y-%m")        # "2018-01", "2018-02", ...
+
+# --- CLI と CI_c のコヒーレンス＆位相差を府県ごとに計算・描画 ---
+
+# CLI 系列と CI_c 系列を抽出（列名に "cli" と "ci_c" を含むと仮定）
+cli_vars <- c("kansai_cli","osaka_cli","hyogo_cli","kyoto_cli","shiga_cli","nara_cli","waka_cli")
+ci_vars  <- c("kansai_ci_c","osaka_ci_c","hyogo_ci_c","kyoto_ci_c","shiga_ci_c","nara_ci_c","waka_ci_c")
+
+# 府県名は「Osaka_cli」→ "Osaka" のように "_" より前の部分と仮定
+pref_cli <- sub("_.*", "", cli_vars)
+pref_ci  <- sub("_.*", "", ci_vars)
+
+# CLI と CI_c の両方がそろっている府県だけを対象
+prefs <- intersect(pref_cli, pref_ci)
+
+# 結果を入れておくリスト
+coh_results <- list()
+
+for (p in prefs) {
+  # 当該府県の CLI 列名と CI_c 列名
+  v_cli <- cli_vars[pref_cli == p][1]
+  v_ci  <- ci_vars[pref_ci  == p][1]
+
+  # ---- ウェーブレット・コヒーレンス解析 ----
+sink("nul")
+    coh_results[[p]] <- analyze.coherency(
+    my.data     = df1,
+    my.pair     = c(v_cli, v_ci),
+    loess.span  = 0,
+    dt          = dt,
+    dj          = dj,
+    lowerPeriod = lowerPeriod,
+    upperPeriod = upperPeriod,
+    make.pval   = TRUE,
+    n.sim       = 100
+  )
+sink()
+
+  # コヒーレンスのプロット
+  wc.image(
+    coh_results[[p]],
+    main          = paste(p, "CLI vs CI_c - Wavelet Coherence"),
+    legend.params = list(lab = "Coherence"),
+    # x軸（先ほどと同じ YYYY-MM 表示）
+ #   timelab       = "Month",
+    spec.time.axis = list(
+      at     = time_ticks,
+      labels = time_labels,
+      las    = 2
+    ),
+    # y軸
+    periodlab     = "Period (months)",
+    plot.coi      = TRUE,
+    n.levels      = 100
+  )
+
+}
+
+
+```
+
+
+
