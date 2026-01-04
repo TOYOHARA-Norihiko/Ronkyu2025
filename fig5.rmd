@@ -3,6 +3,8 @@ title: "Fig 5"
 author: "N Toyohara"
 output: html_document
 ---
+[← Index（目次）に戻る](https://toyohara-norihiko.github.io/Ronkyu2025/)
+---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -146,3 +148,4 @@ tick_dates <- as.Date(paste0(years, "-01-01"))
   }
 }
 ```
+
