@@ -4,6 +4,9 @@ author: "N Toyohara"
 output: html_document
 ---
 
+[← Index（目次）に戻る](https://toyohara-norihiko.github.io/Ronkyu2025/)
+
+---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -95,4 +98,5 @@ fig1(a=12,b=25)
 fig1(a=24,b=25)
 
 ```
+
 
