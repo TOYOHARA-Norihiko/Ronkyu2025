@@ -3,7 +3,8 @@ title: "Fig2"
 author: "N Toyohara"
 output: html_document
 ---
-
+[← Index（目次）に戻る](https://toyohara-norihiko.github.io/Ronkyu2025/)
+---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -125,5 +126,6 @@ for (a_fixed in a_vec) {
 [a= 6の3次元図を開く](kansai_cli_morlet_3d_a=06.html)<br>
 [a=12の3次元図を開く](kansai_cli_morlet_3d_a=12.html)<br>
 [a=24の3次元図を開く](kansai_cli_morlet_3d_a=24.html)<br>
+
 
 
